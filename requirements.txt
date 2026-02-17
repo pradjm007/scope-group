@@ -1,0 +1,5 @@
+psycopg2-binary>=2.9
+pandas>=1.5
+openpyxl
+fastapi>=0.78
+uvicorn[standard]>=0.18

@@ -1,0 +1,99 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: my_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+      POSTGRES_DB: mydatabase
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  airflow-init:
+    image: apache/airflow:2.8.1
+    depends_on:
+      - postgres
+    environment:
+      AIRFLOW__WEBSERVER__SECRET_KEY: mySuperSecretKey123!
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://myuser:mypassword@postgres:5432/mydatabase
+      AIRFLOW__CORE__FERNET_KEY: 'Mf7lt4IB3Xf0SMhBPeDHwVnLV0pZqKLdChUyfl43VoU='
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      PYTHONPATH: /opt/airflow/project
+    volumes:
+      - ../dags:/opt/airflow/dags
+      - ../upload_folder:/opt/airflow/upload_folder
+      - ../files_tracker:/opt/airflow/files_tracker
+      - ../.:/opt/airflow/project
+      - ../requirements.txt:/requirements.txt
+    command: >
+      bash -c "airflow db upgrade && airflow users create --username admin --firstname admin --lastname admin --role Admin --email admin@example.com --password admin || true && pip install -r /requirements.txt && airflow webserver"
+
+
+  airflow-webserver:
+    image: apache/airflow:2.8.1
+    container_name: airflow_webserver
+    restart: always
+    depends_on:
+      - airflow-init
+    environment:
+      AIRFLOW__WEBSERVER__SECRET_KEY: mySuperSecretKey123!
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://myuser:mypassword@postgres:5432/mydatabase
+      AIRFLOW__CORE__FERNET_KEY: 'Mf7lt4IB3Xf0SMhBPeDHwVnLV0pZqKLdChUyfl43VoU='
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      PYTHONPATH: /opt/airflow/project
+    volumes:
+      - ../dags:/opt/airflow/dags
+      - ../upload_folder:/opt/airflow/upload_folder
+      - ../files_tracker:/opt/airflow/files_tracker
+      - ../.:/opt/airflow/project
+      - ../requirements.txt:/requirements.txt
+    ports:
+      - "8080:8080"
+    command: bash -c "pip install -r /requirements.txt && airflow webserver"
+
+  airflow-scheduler:
+    image: apache/airflow:2.8.1
+    container_name: airflow_scheduler
+    restart: always
+    depends_on:
+      - airflow-init
+    environment:
+      AIRFLOW__WEBSERVER__SECRET_KEY: mySuperSecretKey123!
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://myuser:mypassword@postgres:5432/mydatabase
+      AIRFLOW__CORE__FERNET_KEY: 'Mf7lt4IB3Xf0SMhBPeDHwVnLV0pZqKLdChUyfl43VoU='
+      PYTHONPATH: /opt/airflow/project
+    volumes:
+      - ../dags:/opt/airflow/dags
+      - ../upload_folder:/opt/airflow/upload_folder
+      - ../files_tracker:/opt/airflow/files_tracker
+      - ../.:/opt/airflow/project
+      - ../requirements.txt:/requirements.txt
+    command: bash -c "pip install -r /requirements.txt && airflow scheduler"
+
+  fastapi:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.fastapi
+    container_name: fastapi_service
+    restart: always
+    depends_on:
+      - postgres
+    environment:
+      DATABASE_URL: postgresql://myuser:mypassword@postgres:5432/mydatabase
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../.:/app
+    # In development we mount the project to allow quick edits; production can remove the volume
+    # The Dockerfile installs requirements during build; the volume override keeps container code in sync.
+
+volumes:
+  pgdata:
